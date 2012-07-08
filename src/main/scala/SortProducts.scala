@@ -24,16 +24,32 @@ case class Result(
 );
 
 object SortProducts extends App {
-	def readProducts(filename: String): Array[Product] = {
-		for(line <- Source.fromFile(filename).getLines()) {
-			println(line)
+	def readProducts(filename: String) = {
+		for (line <- Source.fromFile(filename).getLines) {
+			val productMaybe = JSON.parseRaw(line)
+			productMaybe match {
+				case Some(productJson) => {
+					val product = productJson.asInstanceOf[JSONObject].obj.asInstanceOf[Map[String,String]]
+					for { product_name <- product.get("product_name")
+						  manufacturer <- product.get("manufacturer")
+						  family <- product.get("family")
+						  model <- product.get("model")
+						  announced_date <- product.get("announced-date")
+						} {
+						val p = Product(product_name, manufacturer, family, model, announced_date)
+						println(p.product_name)
+					}
+				}
+				case None => {
+					println("bad parsing!");
+				}
+			}
 		}
 		
 	}
 	// products = readProducts("products.txt");
 	// listings = readLisings();
 	// results = new Array[Result]();
-	val s:String = """{"title":"LED Flash Macro Ring Light (48 X LED) with 6 Adapter Rings for For Canon/Sony/Nikon/Sigma Lenses","manufacturer":"Neewer Electronics Accessories","currency":"CAD","price":"35.99"}"""
-	val res = JSON.parseRaw(s)
-	println(res.obj.get("title"))
+	readProducts("products.txt");
+	//println(res.obj.get("title"))
 }

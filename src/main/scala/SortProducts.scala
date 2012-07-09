@@ -24,32 +24,45 @@ case class Result(
 );
 
 object SortProducts extends App {
-	def readProducts(filename: String) = {
-		for (line <- Source.fromFile(filename).getLines) {
-			val productMaybe = JSON.parseRaw(line)
-			productMaybe match {
-				case Some(productJson) => {
-					val product = productJson.asInstanceOf[JSONObject].obj.asInstanceOf[Map[String,String]]
-					for { product_name <- product.get("product_name")
-						  manufacturer <- product.get("manufacturer")
-						  family <- product.get("family")
-						  model <- product.get("model")
-						  announced_date <- product.get("announced-date")
-						} {
-						val p = Product(product_name, manufacturer, family, model, announced_date)
-						println(p.product_name)
-					}
+	def readJson[A](filename: String, makeObject: Map[String, String] => Option[A]):Iterator[A] = {
+		Source.fromFile(filename).getLines.flatMap {
+			line => 
+			JSON.parseRaw(line) match {
+				case Some(jsonType) => {
+					makeObject(jsonType.asInstanceOf[JSONObject].obj.asInstanceOf[Map[String, String]])
 				}
 				case None => {
-					println("bad parsing!");
+					println ("parsing error")
+					None
 				}
 			}
 		}
-		
+	}
+
+	def productFromMap(map: Map[String, String]): Option[Product] = {
+		for { product_name <- map.get("product_name")
+		  manufacturer <- map.get("manufacturer")
+		  family <- map.get("family")
+		  model <- map.get("model")
+		  announced_date <- map.get("announced-date")
+		} return Some(Product(product_name, manufacturer, family, model, announced_date))
+		return None
+	}
+
+	def listingFromMap(map: Map[String, String]): Option[Listing] = {
+		for { title <- map.get("title")
+		  manufacturer <- map.get("manufacturer")
+		  currency <- map.get("currency")
+		  price <- map.get("price")
+		} return Some(Listing(title, manufacturer, currency, price))
+		return None
 	}
 	// products = readProducts("products.txt");
 	// listings = readLisings();
 	// results = new Array[Result]();
-	readProducts("products.txt");
+	val products = readJson("products.txt", productFromMap)
+	println(products.size)
+	val listings = readJson("listings.txt", listingFromMap)
+	println(listings.size)
 	//println(res.obj.get("title"))
 }

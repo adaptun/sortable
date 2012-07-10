@@ -10,21 +10,31 @@ case class Product(
 	family: String,
 	model: String,
 	announced_date: String
-);
+	)
 
 case class Listing(
 	title: String,
 	manufacturer: String,
 	currency: String,
 	price: String
-);
+	) {
+	override def toString = "qq"
+}
 
 case class Result(
 	product_name: String,
-	listings: List[Listing]
-);
+	listings: Array[Listing]
+	)
+
+case class OneResult(
+	product_name: String,
+	listing: Listing
+	)
 
 object SortProducts extends App {
+
+	val ACCEPT_VALUE = 0.7
+
 	def readJson[A](filename: String, makeObject: Map[String, String] => Option[A]):Iterator[A] = {
 		Source.fromFile(filename).getLines.flatMap {
 			line => 
@@ -62,18 +72,13 @@ object SortProducts extends App {
 	def instr(a: String, b: String) = if ( a.toLowerCase().indexOf(b.toLowerCase()) != -1) 1.0 else 0.0
 
 	def weight(listing: Listing, product: Product): Double = {
-		//if (instr(product.manufacturer, listing.manufacturer) == 1) {
-				val words = (product.product_name + " " + product.family + " " + product.model + " " + product.manufacturer).
-							replace("_"," ").replace("-"," ").split(" ")
+		val words = (product.product_name + " " + product.family + " " + product.model + " " + product.manufacturer).
+					replace("_"," ").replace("-"," ").split(" ")
 
-				words.foldLeft(0.0)( (res, word) => res + instr(listing.title, word) ) / words.size
-		//	} else {
-		//		-1
-		//	}
-
+		words.foldLeft(0.0)( (res, word) => res + instr(listing.title, word) ) / words.size
 	}
 
-	def assign(listing: Listing, products: List[Product]): Option[Result] = {
+	def assign(listing: Listing, products: List[Product]): Option[OneResult] = {
 		case class PossibleResult (
 			product_name: String,
 			weight: Double
@@ -82,7 +87,7 @@ object SortProducts extends App {
 		def choseBestProduct(best: PossibleResult, probe: Product): PossibleResult = {
 			val probeWeight = weight(listing, probe)
 			if (probeWeight > best.weight) {
-				println("try " + probe.product_name + " with weight " + probeWeight)
+				//println("try " + probe.product_name + " with weight " + probeWeight)
 				PossibleResult(probe.product_name, probeWeight)
 			} else {
 				best
@@ -91,20 +96,33 @@ object SortProducts extends App {
 
 		val default = PossibleResult("", -1)
 		val probe = products.foldLeft(default)(choseBestProduct)
-		if (probe.weight > 0.7) {
-			Some(Result(
-				product_name = probe.product_name,
-				listings = List(listing)
-			))
+		if (probe.weight > ACCEPT_VALUE) {
+			Some(OneResult(probe.product_name, listing))
 		} else {
 			None
 		}
 	}
 	
+	def extractListings(oneResults: Traversable[OneResult]):Array[Listing] = {
+		oneResults.map(_.listing).toArray
+	}
 	// products = readProducts("products.txt");
 	// listings = readLisings();
 	// results = new Array[Result]();
 	val products = readJson("products.txt", productFromMap).toList
 	//println(products.size)
-	val results = readJson("listings.txt", listingFromMap).take(20).map(listing => assign(listing, products))
+	val results = readJson("listings.txt", listingFromMap)
+					.take(20)
+					.flatMap(listing => assign(listing, products)) // match listing with some product, or not
+					.toTraversable
+					.groupBy(_.product_name)
+					.mapValues(extractListings)
+
+	for ((product_name, listings) <- results) {
+		print("{")
+		print(""""product_name":"""" + product_name + """",""")
+		print(""""listings":[""")
+		listings.mkString(",")
+		println("]}")
+	}
 }

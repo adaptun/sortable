@@ -1,6 +1,7 @@
 import scala.io.Source
 import scala.util.parsing.json.JSON
 import scala.util.parsing.json.JSONObject
+import java.lang.Integer
 
 
 case class Product(
@@ -20,7 +21,7 @@ case class Listing(
 
 case class Result(
 	product_name: String,
-	listings: Array[Listing]
+	listings: List[Listing]
 );
 
 object SortProducts extends App {
@@ -57,12 +58,53 @@ object SortProducts extends App {
 		} return Some(Listing(title, manufacturer, currency, price))
 		return None
 	}
+
+	def instr(a: String, b: String) = if ( a.toLowerCase().indexOf(b.toLowerCase()) != -1) 1.0 else 0.0
+
+	def weight(listing: Listing, product: Product): Double = {
+		//if (instr(product.manufacturer, listing.manufacturer) == 1) {
+				val words = (product.product_name + " " + product.family + " " + product.model + " " + product.manufacturer).
+							replace("_"," ").replace("-"," ").split(" ")
+
+				words.foldLeft(0.0)( (res, word) => res + instr(listing.title, word) ) / words.size
+		//	} else {
+		//		-1
+		//	}
+
+	}
+
+	def assign(listing: Listing, products: List[Product]): Option[Result] = {
+		case class PossibleResult (
+			product_name: String,
+			weight: Double
+		)
+
+		def choseBestProduct(best: PossibleResult, probe: Product): PossibleResult = {
+			val probeWeight = weight(listing, probe)
+			if (probeWeight > best.weight) {
+				println("try " + probe.product_name + " with weight " + probeWeight)
+				PossibleResult(probe.product_name, probeWeight)
+			} else {
+				best
+			}
+		}
+
+		val default = PossibleResult("", -1)
+		val probe = products.foldLeft(default)(choseBestProduct)
+		if (probe.weight > 0.7) {
+			Some(Result(
+				product_name = probe.product_name,
+				listings = List(listing)
+			))
+		} else {
+			None
+		}
+	}
+	
 	// products = readProducts("products.txt");
 	// listings = readLisings();
 	// results = new Array[Result]();
-	val products = readJson("products.txt", productFromMap)
-	println(products.size)
-	val listings = readJson("listings.txt", listingFromMap)
-	println(listings.size)
-	//println(res.obj.get("title"))
+	val products = readJson("products.txt", productFromMap).toList
+	//println(products.size)
+	val results = readJson("listings.txt", listingFromMap).take(20).map(listing => assign(listing, products))
 }

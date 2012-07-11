@@ -1,15 +1,17 @@
+import java.io.PrintWriter
+import java.lang.Integer
 import scala.io.Source
 import scala.util.parsing.json.JSON
 import scala.util.parsing.json.JSONObject
-import java.lang.Integer
-
+import scala.collection.GenTraversable
 
 case class Product(
 	product_name: String,
 	manufacturer: String,
 	family: String,
 	model: String,
-	announced_date: String
+	announced_date: String,
+	words: Array[String]
 	)
 
 case class Listing(
@@ -18,7 +20,8 @@ case class Listing(
 	currency: String,
 	price: String
 	) {
-	override def toString = "qq"
+	override def toString = 
+	"""{"title": "%s", "manufacturer": "%s", "currency": "%s", "price": "%s"}""".format(title,manufacturer,currency,price)
 }
 
 case class Result(
@@ -43,7 +46,7 @@ object SortProducts extends App {
 					makeObject(jsonType.asInstanceOf[JSONObject].obj.asInstanceOf[Map[String, String]])
 				}
 				case None => {
-					println ("parsing error")
+					System.err.printf ("Cannot parse =" + line + "=")
 					None
 				}
 			}
@@ -56,7 +59,14 @@ object SortProducts extends App {
 		  family <- map.get("family")
 		  model <- map.get("model")
 		  announced_date <- map.get("announced-date")
-		} return Some(Product(product_name, manufacturer, family, model, announced_date))
+		} return Some(Product(product_name, 
+							  manufacturer, 
+							  family, 
+							  model, 
+							  announced_date,
+							  (product_name + " " + family + " " + model + " " + manufacturer).toLowerCase()
+									.replace("_"," ").replace("-"," ").split(" ")
+			))
 		return None
 	}
 
@@ -69,12 +79,11 @@ object SortProducts extends App {
 		return None
 	}
 
-	def instr(a: String, b: String) = if ( a.toLowerCase().indexOf(b.toLowerCase()) != -1) 1.0 else 0.0
+	// b lowercased already
+	def instr(a: String, b: String) = if ( a.toLowerCase().indexOf(b) != -1) 1.0 else 0.0
 
 	def weight(listing: Listing, product: Product): Double = {
-		val words = (product.product_name + " " + product.family + " " + product.model + " " + product.manufacturer).
-					replace("_"," ").replace("-"," ").split(" ")
-
+		val words = product.words
 		words.foldLeft(0.0)( (res, word) => res + instr(listing.title, word) ) / words.size
 	}
 
@@ -103,7 +112,7 @@ object SortProducts extends App {
 		}
 	}
 	
-	def extractListings(oneResults: Traversable[OneResult]):Array[Listing] = {
+	def extractListings(oneResults: GenTraversable[OneResult]):Array[Listing] = {
 		oneResults.map(_.listing).toArray
 	}
 	// products = readProducts("products.txt");
@@ -112,17 +121,21 @@ object SortProducts extends App {
 	val products = readJson("products.txt", productFromMap).toList
 	//println(products.size)
 	val results = readJson("listings.txt", listingFromMap)
-					.take(20)
+					//.take(2000)
+					.toTraversable.par
 					.flatMap(listing => assign(listing, products)) // match listing with some product, or not
-					.toTraversable
 					.groupBy(_.product_name)
-					.mapValues(extractListings)
+					.map( x => Result(x._1,extractListings(x._2)))
 
-	for ((product_name, listings) <- results) {
-		print("{")
-		print(""""product_name":"""" + product_name + """",""")
-		print(""""listings":[""")
-		listings.mkString(",")
-		println("]}")
+	// let's print result
+	val out = new PrintWriter("results.txt")
+
+	for (result <- results) {
+		out.print("{")
+		out.print(""""product_name":"""" + result.product_name + """",""")
+		out.print(""""listings":[""")
+		out.println(result.listings.mkString(","))
+		out.println("]}")
 	}
+	out.close()
 }

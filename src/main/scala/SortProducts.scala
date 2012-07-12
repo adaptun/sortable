@@ -36,7 +36,8 @@ case class OneResult(
 
 object SortProducts extends App {
 
-	val ACCEPT_VALUE = 0.7
+	val ACCEPT_VALUE = 0.8
+	val PRICE_SKIP_RATIO = 0.4 // if price less then PRICE_SKIP_RATIO * average_prices then we skip this listing
 
 	def readJson[A](filename: String, makeObject: Map[String, String] => Option[A]):Iterator[A] = {
 		Source.fromFile(filename).getLines.flatMap {
@@ -80,11 +81,12 @@ object SortProducts extends App {
 	}
 
 	// b lowercased already
-	def instr(a: String, b: String) = if ( a.toLowerCase().indexOf(b) != -1) 1.0 else 0.0
+	def instr(a: String, b: String) = if ( (" " + a.toLowerCase() + " ").indexOf(" " + b + " ") != -1) 1.0 else 0.0
 
 	def weight(listing: Listing, product: Product): Double = {
 		val words = product.words
-		words.foldLeft(0.0)( (res, word) => res + instr(listing.title, word) ) / words.size
+		val probeTitle = listing.title.replace("_"," ").replace("-"," ")
+		words.foldLeft(0.0)( (res, word) => res + instr(probeTitle, word) ) / words.size
 	}
 
 	def assign(listing: Listing, products: List[Product]): Option[OneResult] = {
@@ -112,22 +114,36 @@ object SortProducts extends App {
 		}
 	}
 	
+	
+
 	def extractListings(oneResults: GenTraversable[OneResult]):Array[Listing] = {
-		oneResults.map(_.listing).toArray
+		def parseDouble(s: String) = try { Some(s.toDouble) } catch { case _ => None }
+
+		val listings = oneResults.map(_.listing)
+		val priceLimit = PRICE_SKIP_RATIO * listings.flatMap( listing => parseDouble(listing.price)).sum / listings.size
+		
+		//println (priceLimit)
+
+		// we skip listings with price less then some threshold value
+		listings.filter( l =>
+		  parseDouble(l.price) match  {
+			case Some(price) => price > priceLimit
+			case _ => false
+		}).toArray
+
 	}
-	// products = readProducts("products.txt");
-	// listings = readLisings();
-	// results = new Array[Result]();
+
 	val products = readJson("products.txt", productFromMap).toList
-	//println(products.size)
+	
 	val results = readJson("listings.txt", listingFromMap)
-					//.take(2000)
-					.toTraversable.par
+					//.take(1300)
+					.toTraversable
+					//.par
 					.flatMap(listing => assign(listing, products)) // match listing with some product, or not
 					.groupBy(_.product_name)
 					.map( x => Result(x._1,extractListings(x._2)))
-
-	// let's print result
+	
+	// let's print results
 	val out = new PrintWriter("results.txt")
 
 	for (result <- results) {
